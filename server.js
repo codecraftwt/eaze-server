@@ -1,15 +1,10 @@
 import express from 'express';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import fetch from 'node-fetch';  // Ensure you install 'node-fetch' as a dependency
 import cors from 'cors';
 import dotenv from 'dotenv';
 
 // Load environment variables from .env file
 dotenv.config();
-// Get the current directory name
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = 3000;
@@ -18,11 +13,7 @@ let cached = null;
 let inflight = null;
 
 async function fetchTokenFromSalesforce() {
-//   const SF_INSTANCE = process.env.SF_INSTANCE_URL;  // e.g., https://yourdomain.my.salesforce.com
-//   const CLIENT_ID = process.env.SF_CLIENT_ID;
-//   const CLIENT_SECRET = process.env.SF_CLIENT_SECRET;
-
-const SF_INSTANCE = process.env.VITE_API_URL;
+  const SF_INSTANCE = process.env.VITE_API_URL;
   const CLIENT_ID = process.env.VITE_SF_CLIENT_ID;
   const CLIENT_SECRET = process.env.VITE_SF_CLIENT_SECRET;
 
@@ -71,12 +62,11 @@ async function getToken() {
 
   return inflight;
 }
+
 app.use(cors());
 app.use(express.json());
-// Serve static files from the "dist" directory
-app.use(express.static(path.join(__dirname, 'dist')));
 
-// Token API (already works)
+// Token API
 app.get('/api/token', async (req, res) => {
   try {
     const token = await getToken();
@@ -91,11 +81,6 @@ app.get('/api/token', async (req, res) => {
     return res.status(500).json({ error: 'token_fetch_failed', detail: String(err.message) });
   }
 });
-
-// Catch-all route for React client-side routing
-// app.get('*', (req, res) => {
-//   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-// });
 
 app.listen(port, () => {
   console.log(`Server is running at http://localhost:${port}`);

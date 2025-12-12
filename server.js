@@ -12,15 +12,24 @@ const port = 3000;
 let cached = null;
 let inflight = null;
 
-async function fetchTokenFromSalesforce() {
-  const SF_INSTANCE = process.env.VITE_API_URL;
-  const CLIENT_ID = process.env.VITE_SF_CLIENT_ID;
-  const CLIENT_SECRET = process.env.VITE_SF_CLIENT_SECRET;
+async function getToken(SF_INSTANCE, CLIENT_ID, CLIENT_SECRET) {
+  if (cached && Date.now() + 10000 < cached.expires_at) return cached;
+  if (inflight) return inflight;
 
-  if (!SF_INSTANCE || !CLIENT_ID || !CLIENT_SECRET) {
-    throw new Error('Missing SF_INSTANCE_URL / SF_CLIENT_ID / SF_CLIENT_SECRET env vars');
-  }
+  inflight = (async () => {
+    try {
+      const token = await fetchTokenFromSalesforce(SF_INSTANCE, CLIENT_ID, CLIENT_SECRET);
+      cached = token;
+      return token;
+    } finally {
+      inflight = null;
+    }
+  })();
 
+  return inflight;
+}
+
+async function fetchTokenFromSalesforce(SF_INSTANCE, CLIENT_ID, CLIENT_SECRET) {
   const url = `${SF_INSTANCE.replace(/\/$/, '')}/services/oauth2/token`;
   const params = new URLSearchParams();
   params.append('grant_type', 'client_credentials');
@@ -46,41 +55,32 @@ async function fetchTokenFromSalesforce() {
   return data;
 }
 
-async function getToken() {
-  if (cached && Date.now() + 10000 < cached.expires_at) return cached;
-  if (inflight) return inflight;
-
-  inflight = (async () => {
-    try {
-      const token = await fetchTokenFromSalesforce();
-      cached = token;
-      return token;
-    } finally {
-      inflight = null;
-    }
-  })();
-
-  return inflight;
-}
 
 app.use(cors());
 app.use(express.json());
 
 // Token API
-app.get('/api/token', async (req, res) => {
+app.post('/api/token', async (req, res) => {
+  const { SF_INSTANCE, CLIENT_ID, CLIENT_SECRET } = req.body;
+
+  if (!SF_INSTANCE || !CLIENT_ID || !CLIENT_SECRET) {
+    return res.status(400).json({ error: 'Missing SF_INSTANCE / SF_CLIENT_ID / SF_CLIENT_SECRET in request body' });
+  }
+
   try {
-    const token = await getToken();
+    const token = await getToken(SF_INSTANCE, CLIENT_ID, CLIENT_SECRET);
     return res.status(200).json({
       access_token: token.access_token,
       token_type: token.token_type,
       issued_at: token.issued_at || Date.now(),
-      expires_at: token.expires_at
+      expires_at: token.expires_at,
     });
   } catch (err) {
     console.error('Token fetch error', err);
     return res.status(500).json({ error: 'token_fetch_failed', detail: String(err.message) });
   }
 });
+
 
 app.listen(port, () => {
   console.log(`Server is running at http://localhost:${port}`);
